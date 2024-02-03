@@ -15,6 +15,10 @@ import ipywidgets as widgets
 from datetime import datetime
 from yandex_query_magic import jinja_template
 from typing import Optional, Dict
+from .ipythondisplay import IpythonDisplay
+import nest_asyncio
+
+nest_asyncio.apply()
 
 
 @magics_class
@@ -26,14 +30,15 @@ class YQMagics(Magics):
 
     def __init__(self, shell):
         Magics.__init__(self, shell=shell)
+        self.ipython_display = IpythonDisplay()
 
     # Executes query in YQ
-    def yq_execute_query(self,
-                         folder_id: Optional[str],
-                         query_text: str,
-                         name: Optional[str] = None,
-                         description: Optional[str] = None,
-                         as_dataframe: bool = True):
+    async def yq_execute_query(self,
+                               folder_id: Optional[str],
+                               query_text: str,
+                               name: Optional[str] = None,
+                               description: Optional[str] = None,
+                               as_dataframe: bool = True) -> None:
 
         yq = YandexQuery()
         if YQMagics.Sa_info is not None:
@@ -125,17 +130,17 @@ class YQMagics(Magics):
             # Singe we need to react on Abort button,
             # we need to process UI event loop from time to time
             with ui_events() as ui_poll:
-                ui_poll(0.1)
+                ui_poll(1)
 
         async def abort_query_async(query_id: str) -> None:
-            await yq.stop_query(folder_id, query_id)
-
-        # Callback to stop the query
-        def abort_query():
             try:
-                loop.run_until_complete(abort_query_async(query_id))
+                await yq.stop_query(folder_id, query_id)
             except Exception as ex:
                 stop_status.value = str(ex)
+
+        # Callback to stop the query
+        def abort_query(b):
+            loop.create_task(abort_query_async(query_id))
 
         abort_query_button.on_click(abort_query)
 
@@ -143,11 +148,11 @@ class YQMagics(Magics):
         display(all_widgets)  # noqa
 
         started_at = datetime.now()
-        query_id = loop.run_until_complete(yq.start_execute_query(
+        query_id = await yq.start_execute_query(
             folder_id,
             query_text,
             name,
-            description))
+            description)
 
         label_query_id.value = f"Query id is <a style='text-decoration: underline;'"\
                                f" href='https://yq.cloud.yandex.ru/folders/{folder_id}/ide/queries/{query_id}'"\
@@ -156,16 +161,16 @@ class YQMagics(Magics):
         result = None
         try:
             # Start query execution
-            loop.run_until_complete(yq.wait_results(
-                folder_id,
-                query_id,
-                update_status,
-                update_progress))
+            await yq.wait_results(
+                    folder_id,
+                    query_id,
+                    update_status,
+                    update_progress)
 
             try:
-                query_info = loop.run_until_complete(yq.get_queryinfo(
-                    folder_id,
-                    query_id))
+                query_info = await yq.get_queryinfo(
+                                folder_id,
+                                query_id)
 
                 query_status = query_info["status"]
                 progress.description = query_status
@@ -174,11 +179,15 @@ class YQMagics(Magics):
 
                 # Retrieving query results
                 try:
-                    result = loop.run_until_complete(yq.get_query_result(
-                        folder_id, query_id))
+                    if query_status == "SUCCESS":
+                        result = await yq.get_query_result(folder_id, query_id)
+                        progress.description = "DONE"
+                        progress.bar_style = "success"
 
-                    progress.description = "DONE"
-                    progress.bar_style = "success"
+                    else:
+                        progress.value = 0
+                        progress.description = query_status
+                        progress.bar_style = "danger"
 
                 # If YQ query execution happened, show details
                 except YandexQueryException as ex:
@@ -186,8 +195,9 @@ class YQMagics(Magics):
                     issues.layout.display = 'block'
 
             except Exception as ex:
-                issues.value = ex.__repr__()
-                issues.layout.display = 'block'
+                self.ipython_display.error(ex.__repr__())
+                # issues.value = ex.__repr__()
+                # issues.layout.display = 'block'
 
         finally:
             # Hide abort query button after query execution completed
@@ -253,10 +263,11 @@ class YQMagics(Magics):
         if args.jinja2:
             query = jinja_template.apply_template(query, user_ns)
 
-        return self.yq_execute_query(args.folder_id,
-                                     query, args.name,
-                                     args.description,
-                                     not args.raw_results)
+        loop = asyncio.get_event_loop()
+        loop.run_until_complete(self.yq_execute_query(args.folder_id,
+                                                      query, args.name,
+                                                      args.description,
+                                                      not args.raw_results))
 
 
 def load_ipython_extension(ip):

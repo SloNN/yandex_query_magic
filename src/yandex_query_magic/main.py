@@ -6,7 +6,6 @@ import asyncio
 import aiohttp
 import dateutil.parser
 from enum import Enum
-import nest_asyncio
 from .query_results import YandexQueryResults
 from typing import Optional, Callable, Any
 from aiohttp_retry import RandomRetry, RetryClient
@@ -17,6 +16,9 @@ class YandexQueryException(Exception):
     def __init__(self, issues):
         self.issues = issues
 
+    def __str__(self) -> str:
+        return super().__str__()
+
 
 class YandexQuery():
     "Execute queries in YQ"
@@ -24,7 +26,6 @@ class YandexQuery():
     def __init__(self,
                  base_api_url: str = "https://api.yandex-query.cloud.yandex.net/api/",  # noqa: E501
                  base_iam_url: str = "https://iam.api.cloud.yandex.net"):
-        nest_asyncio.apply()
         self.service_account_key = None
         self.base_api_url = base_api_url
         self.base_iam_url = base_iam_url
