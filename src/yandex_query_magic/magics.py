@@ -179,7 +179,7 @@ class YQMagics(Magics):
 
                 # Retrieving query results
                 try:
-                    if query_status == "SUCCESS":
+                    if query_status == "COMPLETED":
                         result = await yq.get_query_result(folder_id, query_id)
                         progress.description = "DONE"
                         progress.bar_style = "success"
@@ -264,10 +264,13 @@ class YQMagics(Magics):
             query = jinja_template.apply_template(query, user_ns)
 
         loop = asyncio.get_event_loop()
-        loop.run_until_complete(self.yq_execute_query(args.folder_id,
-                                                      query, args.name,
-                                                      args.description,
-                                                      not args.raw_results))
+        query_result = None
+        query_result = loop.run_until_complete(
+            self.yq_execute_query(args.folder_id,
+                                  query, args.name,
+                                  args.description,
+                                  not args.raw_results))
+        return query_result
 
 
 def load_ipython_extension(ip):

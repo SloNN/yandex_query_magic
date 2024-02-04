@@ -2,6 +2,8 @@
 
 Yandex Query cell (%%yq) and line (%yq) magics for Jupyter and VSCode
 
+![a](screenshot.png)
+
 ## Motivation
 
 yandex_query_magic was created to:
