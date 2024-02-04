@@ -72,7 +72,8 @@ async def test_auth(iam_httpserver: HTTPServer, yandex_query: YandexQuery):
                         content_type="application/json")
 
     iam_httpserver.expect_request("/iam/v1/tokens",
-                                  method="POST").respond_with_handler(handler)
+                                  method="POST").\
+                                  respond_with_handler(handler)  # noqa
 
     await yandex_query._get_iam_token()
 
@@ -98,6 +99,46 @@ async def test_auth_timeout(iam_httpserver: HTTPServer,
                                       {"iamToken": "test_iam_token"})
 
     await yandex_query._get_iam_token()
+
+
+@pytest.mark.asyncio
+async def test_user_agent(iam_httpserver: HTTPServer,
+                          yq_httpserver: HTTPServer,
+                          yandex_query: YandexQuery):
+    "Tests happy path to create query"
+    assert yandex_query is not None
+
+    folder_id = "folder_id"
+    query_id = "query_id"
+    name = "name"
+    description = "description"
+    query_text = "select 1"
+
+    # Set up IAM to handle all auth queries
+    iam_httpserver.expect_request("/iam/v1/tokens", method="POST",
+                                  headers={"User-Agent": "Jupyter yandex_query_magic"},  # noqa
+                                  handler_type=httpserver.HandlerType.PERMANENT).\
+        respond_with_json({"iamToken": "test_iam_token"})  # noqa
+
+    # Checking correctness of create-query command
+    yq_httpserver.expect_request("/fq/v1/queries",
+                                 query_string=f"project={folder_id}",
+                                 method="POST",
+                                 headers={"User-Agent": "Jupyter yandex_query_magic"},  # noqa
+                                 json={"name": name,
+                                       "description": description,
+                                       "text": query_text,
+                                       "type": "ANALYTICS"}).\
+        respond_with_json({"id": query_id})
+
+    # Issue create-query command
+    expected_query_id = await yandex_query.start_execute_query(folder_id,
+                                                               query_text,
+                                                               name,
+                                                               description)
+
+    # Checking if expected query id is the same as created
+    assert expected_query_id == query_id
 
 
 @pytest.mark.asyncio

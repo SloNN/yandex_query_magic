@@ -87,6 +87,7 @@ class YandexQuery():
         if iam_token is not None:
             _headers['Authorization'] = f"{iam_token}"
 
+        _headers["User-Agent"] = "Jupyter yandex_query_magic"
         return _headers
 
     def set_service_account_key(self, auth_info: str):
